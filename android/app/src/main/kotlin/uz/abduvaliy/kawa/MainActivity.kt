@@ -7,8 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.LauncherApps
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -22,7 +20,6 @@ import io.flutter.embedding.android.FlutterActivityLaunchConfigs.BackgroundMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
-import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
 /**
@@ -35,6 +32,7 @@ class MainActivity : FlutterActivity() {
     private var sink: EventChannel.EventSink? = null
     private val launcherApps by lazy { getSystemService(LauncherApps::class.java) }
     private val user: UserHandle get() = Process.myUserHandle()
+    private val prefs by lazy { getSharedPreferences("kawa", Context.MODE_PRIVATE) }
 
     // Draw the wallpaper behind a transparent Flutter surface.
     override fun getBackgroundMode() = BackgroundMode.transparent
@@ -102,13 +100,15 @@ class MainActivity : FlutterActivity() {
                         main.post { result.success(list) }
                     }
 
-                    "icon" -> {
-                        val cn = component(call.argument<String>("component"))
-                        val size = call.argument<Int>("size") ?: 96
-                        io.execute {
-                            val png = try { iconPng(cn, size) } catch (e: Exception) { null }
-                            main.post { result.success(png) }
-                        }
+                    // Favorites live in plain SharedPreferences: one package name per line.
+                    "getFavorites" -> result.success(
+                        prefs.getString("favorites", "")!!.split("\n").filter { it.isNotBlank() }
+                    )
+
+                    "setFavorites" -> {
+                        val list = call.argument<List<String>>("favorites") ?: emptyList()
+                        prefs.edit().putString("favorites", list.joinToString("\n")).apply()
+                        result.success(null)
                     }
 
                     "launch" -> {
@@ -147,20 +147,6 @@ class MainActivity : FlutterActivity() {
 
     private fun component(flat: String?): ComponentName =
         ComponentName.unflattenFromString(flat ?: "") ?: error("bad component: $flat")
-
-    private fun iconPng(cn: ComponentName, size: Int): ByteArray? {
-        val info = launcherApps.resolveActivity(Intent(Intent.ACTION_MAIN).setComponent(cn), user)
-            ?: return null
-        val drawable = info.getIcon(resources.displayMetrics.densityDpi)
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        drawable.setBounds(0, 0, size, size)
-        drawable.draw(Canvas(bmp))
-        return ByteArrayOutputStream().use {
-            bmp.compress(Bitmap.CompressFormat.PNG, 100, it)
-            bmp.recycle()
-            it.toByteArray()
-        }
-    }
 
     /** Clock tap opens the clock app; alarm tap opens its alarms screen. */
     private fun openClock(alarms: Boolean) {

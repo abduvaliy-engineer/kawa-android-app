@@ -16,7 +16,12 @@ Future<void> main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
   final model = AppsModel();
-  await model.init();
+  // A Home that never draws is a bricked phone: always reach runApp.
+  try {
+    await model.init();
+  } catch (e) {
+    debugPrint('kawa: init failed: $e');
+  }
   runApp(KawaApp(model: model));
 }
 
