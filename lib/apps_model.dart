@@ -12,6 +12,9 @@ class AppsModel extends ChangeNotifier {
   DateTime? nextAlarm;
   bool isDefaultHome = true;
 
+  /// False until the user has been through the Favorites picker once.
+  bool favoritesChosen = true;
+
   /// Apps grouped by rail letter, in rail order ('#' first, then A–Z).
   Map<String, List<AppEntry>> sections = const {};
 
@@ -20,7 +23,9 @@ class AppsModel extends ChangeNotifier {
 
   Future<void> init() async {
     try {
-      _favorites = await Native.getFavorites();
+      final f = await Native.getFavorites();
+      favoritesChosen = f != null;
+      _favorites = f ?? [];
     } catch (e) {
       debugPrint('kawa: favorites unavailable: $e');
     }
@@ -99,6 +104,16 @@ class AppsModel extends ChangeNotifier {
       letter == '★' ? favorites : (sections[letter] ?? const []);
 
   bool isFavorite(String package) => _favorites.contains(package);
+
+  List<String> get favoritePackages => List.of(_favorites);
+
+  /// Replaces Favorites with [packages], in that order.
+  Future<void> setFavorites(List<String> packages) async {
+    _favorites = List.of(packages);
+    favoritesChosen = true;
+    notifyListeners();
+    await Native.setFavorites(_favorites);
+  }
 
   Future<void> toggleFavorite(String package) async {
     if (!_favorites.remove(package)) _favorites.add(package);

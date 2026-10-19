@@ -143,8 +143,10 @@ class MainActivity : FlutterActivity() {
                     }
 
                     // Favorites live in plain SharedPreferences: one package name per line.
+                    // null = never chosen yet (first run shows the picker).
                     "getFavorites" -> result.success(
-                        prefs.getString("favorites", "")!!.split("\n").filter { it.isNotBlank() }
+                        if (!prefs.contains("favorites")) null
+                        else prefs.getString("favorites", "")!!.split("\n").filter { it.isNotBlank() }
                     )
 
                     "setFavorites" -> {

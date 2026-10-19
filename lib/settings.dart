@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'apps_model.dart';
+import 'favorites_picker.dart';
 import 'native.dart';
 
 /// Kawa's own Settings: default Home app, and what Kawa is.
@@ -61,6 +62,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : 'Another launcher is your home screen right now.',
                   style: const TextStyle(color: dim)),
               onTap: Native.requestDefaultHome,
+            ),
+            ListTile(
+              leading: const Icon(Icons.star_outline),
+              title: const Text('Choose Favorites'),
+              subtitle: const Text('Pick and order the apps under the clock.',
+                  style: TextStyle(color: dim)),
+              onTap: () => openFavoritesPicker(context, widget.model),
             ),
             const Divider(height: 24),
             ListTile(

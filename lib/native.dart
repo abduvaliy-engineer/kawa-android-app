@@ -37,8 +37,12 @@ class Native {
     ];
   }
 
-  static Future<List<String>> getFavorites() async =>
-      await _m.invokeListMethod<String>('getFavorites') ?? <String>[];
+  /// Pinned packages in order, or null if the user never chose any yet.
+  /// Always a fresh growable copy: the decoded list is fixed-length.
+  static Future<List<String>?> getFavorites() async {
+    final l = await _m.invokeListMethod<String>('getFavorites');
+    return l == null ? null : List<String>.of(l);
+  }
 
   static Future<void> setFavorites(List<String> packages) =>
       _m.invokeMethod('setFavorites', {'favorites': packages});

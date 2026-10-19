@@ -5,6 +5,7 @@ import 'apps_model.dart';
 import 'glance.dart';
 import 'native.dart';
 import 'rail.dart';
+import 'favorites_picker.dart';
 import 'settings.dart';
 import 'style.dart';
 
@@ -51,6 +52,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     model.homePressed.addListener(_goHome);
+    // First run: ask which apps to pin.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !model.favoritesChosen) openFavoritesPicker(context, model);
+    });
     _life = AppLifecycleListener(onResume: () {
       model.refreshAlarm();
       model.refreshApps();
