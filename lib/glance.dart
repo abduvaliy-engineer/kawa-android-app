@@ -84,6 +84,17 @@ class _GlanceState extends State<Glance> {
                   ),
                 ),
             ]),
+            if (!widget.model.isDefaultHome)
+              GestureDetector(
+                onTap: Native.requestDefaultHome,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text('Set Kawa as default home  →',
+                      style: kDate.copyWith(
+                          fontSize: 13, fontWeight: FontWeight.w500)),
+                ),
+              ),
           ],
         ),
       ),

@@ -10,6 +10,7 @@ class AppsModel extends ChangeNotifier {
   List<AppEntry> apps = const [];
   List<String> _favorites = [];
   DateTime? nextAlarm;
+  bool isDefaultHome = true;
 
   /// Apps grouped by rail letter, in rail order ('#' first, then A–Z).
   Map<String, List<AppEntry>> sections = const {};
@@ -31,13 +32,17 @@ class AppsModel extends ChangeNotifier {
           refreshAlarm();
         case 'home':
           homePressed.value++;
+        case 'role':
+          refreshRole();
       }
     });
-    await Future.wait([refreshApps(), refreshAlarm()]);
+    await Future.wait([refreshApps(), refreshAlarm(), refreshRole()]);
   }
 
   Future<void> refreshApps() async {
-    final list = await Native.apps();
+    final list = await Native.apps()
+      ..add(const AppEntry('uz.abduvaliy.kawa', Native.settingsComponent,
+          'Kawa Settings'));
     list.sort((a, b) {
       final ga = a.letter == '#' ? 0 : 1, gb = b.letter == '#' ? 0 : 1;
       if (ga != gb) return ga - gb;
@@ -57,6 +62,16 @@ class AppsModel extends ChangeNotifier {
       await Native.setFavorites(_favorites);
     }
     notifyListeners();
+  }
+
+  Future<void> refreshRole() async {
+    try {
+      final held = await Native.isDefaultHome();
+      if (held != isDefaultHome) {
+        isDefaultHome = held;
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   Future<void> refreshAlarm() async {

@@ -3,20 +3,32 @@
 **Home**
 The screen Android shows when the user presses the home button. Kawa *is* the Home.
 
+**Default Home**
+The one launcher Android uses as Home. The user picks it; Kawa can only ask.
+
 **Glance**
-The top block of the Home: clock, date, and the next alarm. Read-only; it shows, it never asks.
+The top block of the Home: clock, date, and the next alarm. Tapping the clock opens the Clock app; tapping the alarm opens Alarms.
 
 **Favorites**
-The short, user-pinned list of apps shown on the Home under the Glance, as text only. Order is chosen by the user.
+The short, user-pinned list of apps shown on the Home under the Glance, as text only, in pin order.
 
 **App List**
-Every launchable app on the phone, sorted A–Z, with a small icon each. Reached by scrolling/swiping past the Favorites.
+Every launchable app on the phone, sorted A–Z under letter headers, each shown as a dot and its name. Reached by scrolling past the Favorites.
 
 **Alphabet Rail**
-The vertical strip of letters (★, #, A–Z) on the right edge. Dragging along it jumps the App List to that letter. ★ jumps to Favorites.
+The vertical strip on the right edge: ★ then only the letters that have apps. While touched, the letters bend away from the finger and a bubble shows the touched letter.
+
+**Section View**
+What the Home shows while a finger is on the Alphabet Rail: only the touched letter's apps (★ = Favorites). Sliding left onto an app and lifting launches it; lifting on the rail jumps the App List to that letter.
 
 **Search**
-A text field that filters the App List by app name as the user types.
+Pulling down on the Home opens a text field that filters apps by name; Enter launches the top match.
 
 **App Menu**
 The menu that opens on long-press of any app: pin/unpin from Favorites, app info, uninstall.
+
+**Settings**
+Kawa's own screen, opened by long-pressing the Glance or tapping "Kawa Settings" in the App List.
+
+**Kanji of the Hour** *(v0.3)*
+One JLPT N5/N4 kanji, changed every hour, shown with its reading, meaning and one example word.

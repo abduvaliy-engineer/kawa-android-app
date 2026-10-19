@@ -11,22 +11,26 @@ const kHeaderX = 42.0; // left edge of header letters
 const kRailRight = 30.0; // rail letter centre, from the right edge
 const kRailHit = 64.0; // touch strip width on the right edge
 
+/// Set on every style: a style given to AnimatedDefaultTextStyle replaces the
+/// theme's font instead of merging with it (labels fell back to Roboto).
+const kFont = 'Montserrat';
+
 const _shadow = [Shadow(blurRadius: 8, color: Color(0x80000000))];
 
 const kLabel = TextStyle(
-    fontSize: 15, fontWeight: FontWeight.w400, color: Colors.white,
+    fontFamily: kFont, fontSize: 15, fontWeight: FontWeight.w400, color: Colors.white,
     shadows: _shadow);
 const kHeaderText = TextStyle(
-    fontSize: 20, fontWeight: FontWeight.w500, color: Colors.white,
+    fontFamily: kFont, fontSize: 20, fontWeight: FontWeight.w500, color: Colors.white,
     height: 1.0, shadows: _shadow);
 const kClock = TextStyle(
-    fontSize: 45, fontWeight: FontWeight.w300, color: Colors.white,
+    fontFamily: kFont, fontSize: 45, fontWeight: FontWeight.w300, color: Colors.white,
     height: 1.0, shadows: _shadow);
 const kDate = TextStyle(
-    fontSize: 15, fontWeight: FontWeight.w400, color: Color(0xE6FFFFFF),
+    fontFamily: kFont, fontSize: 15, fontWeight: FontWeight.w400, color: Color(0xE6FFFFFF),
     shadows: _shadow);
 const kRailText = TextStyle(
-    fontSize: 16, fontWeight: FontWeight.w400, color: Colors.white,
+    fontFamily: kFont, fontSize: 16, fontWeight: FontWeight.w400, color: Colors.white,
     height: 1.0, shadows: _shadow);
 const kDotColor = Color(0xB3BDBDBD);
 const kBubble = Color(0xFFC8C8C8);

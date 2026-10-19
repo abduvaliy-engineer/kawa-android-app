@@ -23,7 +23,8 @@ class Native {
   static const _e = EventChannel('kawa/events');
 
   /// 'apps' (installed/removed/changed), 'alarm' (next alarm changed),
-  /// 'home' (home button pressed while Kawa is the top activity).
+  /// 'home' (home button pressed while Kawa is the top activity),
+  /// 'role' (the default Home app may have changed).
   static final Stream<String> events =
       _e.receiveBroadcastStream().map((e) => e as String).asBroadcastStream();
 
@@ -55,6 +56,20 @@ class Native {
     final t = await _m.invokeMethod<int>('nextAlarm');
     return t == null ? null : DateTime.fromMillisecondsSinceEpoch(t);
   }
+
+  /// Pseudo-app in the App List that opens Kawa's own Settings.
+  static const settingsComponent = 'kawa:settings';
+
+  static Future<bool> isDefaultHome() async =>
+      await _m.invokeMethod<bool>('isDefaultHome') ?? false;
+
+  /// Asks Android to make Kawa the Home; if it already is, opens the system
+  /// Home picker so the user can switch to another launcher.
+  static Future<void> requestDefaultHome() =>
+      _m.invokeMethod('requestDefaultHome');
+
+  static Future<String> version() async =>
+      await _m.invokeMethod<String>('version') ?? '?';
 
   static Future<void> openClock() => _m.invokeMethod('openClock');
   static Future<void> openAlarms() => _m.invokeMethod('openAlarms');

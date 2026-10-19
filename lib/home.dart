@@ -5,6 +5,7 @@ import 'apps_model.dart';
 import 'glance.dart';
 import 'native.dart';
 import 'rail.dart';
+import 'settings.dart';
 import 'style.dart';
 
 /// One row of the App List: a letter header or an app.
@@ -98,7 +99,17 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _openSettings() {
+    _closeSearch();
+    Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => SettingsScreen(model: model)));
+  }
+
   void _launch(AppEntry a) {
+    if (a.component == Native.settingsComponent) {
+      _openSettings();
+      return;
+    }
     Native.launch(a.component);
     if (_searching) {
       Future.delayed(const Duration(milliseconds: 400), _closeSearch);
@@ -158,9 +169,20 @@ class _HomeScreenState extends State<HomeScreen> {
     _scroll.jumpTo(target.clamp(0.0, _scroll.position.maxScrollExtent));
   }
 
+  /// The system took the touch (e.g. a back gesture): just reset.
+  void _railCancel() => setState(() {
+        _railLetter = null;
+        _bendY = null;
+        _hover = null;
+      });
+
   // ── App Menu ────────────────────────────────────────────────────────────
 
   void _menu(AppEntry a) {
+    if (a.component == Native.settingsComponent) {
+      _openSettings();
+      return;
+    }
     HapticFeedback.mediumImpact();
     final fav = model.isFavorite(a.package);
     showModalBottomSheet<void>(
@@ -231,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         });
         _sectionTop = tops;
-        _listStart = glanceH + favs.length * kRow + kGap;
+        _listStart = glanceH + (favs.isEmpty ? 1 : favs.length) * kRow + kGap;
         final touching = _railLetter != null;
 
         return PopScope(
@@ -261,12 +283,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       top: geo.top,
                       width: kRailHit,
                       height: geo.bottom - geo.top,
-                      child: GestureDetector(
+                      // Raw pointer events, no gesture arena: the arena dropped
+                      // every move of the first drag after a cold start.
+                      child: Listener(
                         behavior: HitTestBehavior.opaque,
-                        onPanDown: (d) => _railAt(d.globalPosition),
-                        onPanUpdate: (d) => _railAt(d.globalPosition),
-                        onPanEnd: (_) => _railEnd(),
-                        onPanCancel: _railEnd,
+                        onPointerDown: (e) => _railAt(e.position),
+                        onPointerMove: (e) => _railAt(e.position),
+                        onPointerUp: (_) => _railEnd(),
+                        onPointerCancel: (_) => _railCancel(),
                       ),
                     ),
                   ]),
@@ -290,7 +314,15 @@ class _HomeScreenState extends State<HomeScreen> {
             parent: ClampingScrollPhysics()),
         slivers: [
           SliverToBoxAdapter(
-            child: SizedBox(height: glanceH, child: Glance(model: model)),
+            // Long-press the empty Glance area for Settings.
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onLongPress: () {
+                HapticFeedback.mediumImpact();
+                _openSettings();
+              },
+              child: SizedBox(height: glanceH, child: Glance(model: model)),
+            ),
           ),
           SliverFixedExtentList(
             itemExtent: kRow,
@@ -299,19 +331,21 @@ class _HomeScreenState extends State<HomeScreen> {
               childCount: favs.length,
             ),
           ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: kGap,
-              child: favs.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.only(left: kLabelX),
-                      child: Text('Long-press an app to pin it',
-                          style: kLabel.copyWith(
-                              fontSize: 13, color: const Color(0x99FFFFFF))),
-                    )
-                  : null,
+          if (favs.isEmpty)
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: kRow,
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                      left: kLabelX, right: kRailHit, top: 18),
+                  child: Text('Long-press an app to pin it',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: kLabel.copyWith(color: const Color(0x99FFFFFF))),
+                ),
+              ),
             ),
-          ),
+          const SliverToBoxAdapter(child: SizedBox(height: kGap)),
           SliverVariedExtentList(
             itemExtentBuilder: (i, _) => rows[i].extent,
             delegate: SliverChildBuilderDelegate(

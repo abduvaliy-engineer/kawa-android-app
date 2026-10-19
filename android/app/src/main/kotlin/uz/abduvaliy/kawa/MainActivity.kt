@@ -1,6 +1,8 @@
 package uz.abduvaliy.kawa
 
+import android.app.Activity
 import android.app.AlarmManager
+import android.app.role.RoleManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -14,7 +16,9 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.os.UserHandle
+import android.os.SystemClock
 import android.provider.AlarmClock
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs.BackgroundMode
 import io.flutter.embedding.engine.FlutterEngine
@@ -24,7 +28,7 @@ import java.util.concurrent.Executors
 
 /**
  * Kawa's only native code: the Android-only parts Flutter can't reach.
- * Channel "kawa/apps" answers calls; "kawa/events" pushes "apps" / "alarm" / "home".
+ * Channel "kawa/apps" answers calls; "kawa/events" pushes "apps" / "alarm" / "home" / "role".
  */
 class MainActivity : FlutterActivity() {
     private val io = Executors.newSingleThreadExecutor()
@@ -67,6 +71,44 @@ class MainActivity : FlutterActivity() {
         unregisterReceiver(alarmChanged)
         io.shutdown()
         super.onDestroy()
+    }
+
+    // ── Default Home ────────────────────────────────────────────────────────
+    private val roles by lazy { getSystemService(RoleManager::class.java) }
+    private var roleAskedAt = 0L
+
+    private fun isDefaultHome() =
+        roles.isRoleAvailable(RoleManager.ROLE_HOME) && roles.isRoleHeld(RoleManager.ROLE_HOME)
+
+    private fun openHomeSettings() =
+        startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+
+    /** Ask Android to make Kawa the Home; if already Home, open the system picker to change it. */
+    private fun requestDefaultHome() {
+        if (isDefaultHome() || !roles.isRoleAvailable(RoleManager.ROLE_HOME)) {
+            openHomeSettings()
+            return
+        }
+        roleAskedAt = SystemClock.elapsedRealtime()
+        @Suppress("DEPRECATION")
+        startActivityForResult(roles.createRequestRoleIntent(RoleManager.ROLE_HOME), REQ_HOME)
+    }
+
+    @Deprecated("FlutterActivity still routes results through here")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_HOME) return
+        // Android silently refuses after the user said no twice: the "dialog"
+        // returns CANCELED almost instantly. Fall back to the system picker then.
+        val instant = SystemClock.elapsedRealtime() - roleAskedAt < 400
+        if (resultCode != Activity.RESULT_OK && instant) openHomeSettings()
+        emit("role")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        emit("role") // the user may come back from the system Home picker
     }
 
     // singleTask HOME activity: pressing home while we're on top lands here.
@@ -134,6 +176,12 @@ class MainActivity : FlutterActivity() {
                         getSystemService(AlarmManager::class.java).nextAlarmClock?.triggerTime
                     )
 
+                    "isDefaultHome" -> result.success(isDefaultHome())
+                    "requestDefaultHome" -> { requestDefaultHome(); result.success(null) }
+                    "version" -> result.success(
+                        packageManager.getPackageInfo(packageName, 0).versionName
+                    )
+
                     "openClock" -> { openClock(alarms = false); result.success(null) }
                     "openAlarms" -> { openClock(alarms = true); result.success(null) }
 
@@ -158,5 +206,9 @@ class MainActivity : FlutterActivity() {
         val pkg = packageManager.resolveActivity(showAlarms, 0)?.activityInfo?.packageName
         val launch = pkg?.let { packageManager.getLaunchIntentForPackage(it) }
         startActivity(launch?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: showAlarms)
+    }
+
+    private companion object {
+        const val REQ_HOME = 7
     }
 }
