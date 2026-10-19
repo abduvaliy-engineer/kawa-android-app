@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'apps_model.dart';
 import 'native.dart';
+import 'style.dart';
 
 const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const _months = [
@@ -52,43 +53,40 @@ class _GlanceState extends State<Glance> {
 
   @override
   Widget build(BuildContext context) {
-    final fg = Colors.white.withValues(alpha: 0.92);
-    final dim = Colors.white.withValues(alpha: 0.7);
+    final h = MediaQuery.sizeOf(context).height;
     final alarm = widget.model.nextAlarm;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 0, 48, 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onTap: Native.openClock,
-            child: Text(
-              '${_two(_now.hour)}:${_two(_now.minute)}',
-              style: TextStyle(
-                  fontSize: 76, fontWeight: FontWeight.w200, color: fg,
-                  height: 1.0, letterSpacing: -1),
+    return Stack(children: [
+      Positioned(
+        left: 45,
+        right: kRailHit,
+        top: h * 0.228,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: Native.openClock,
+              child: Text('${_two(_now.hour)}:${_two(_now.minute)}',
+                  style: kClock),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(children: [
-            Text(
-              '${_days[_now.weekday - 1]} ${_now.day} ${_months[_now.month - 1]}',
-              style: TextStyle(fontSize: 18, color: dim),
-            ),
-            if (alarm != null)
-              GestureDetector(
-                onTap: Native.openAlarms,
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Text('  ·  ⏰ ${_alarmText(alarm)}',
-                      style: TextStyle(fontSize: 18, color: dim)),
-                ),
+            const SizedBox(height: 10),
+            Row(children: [
+              Text(
+                '${_days[_now.weekday - 1]}, ${_now.day} ${_months[_now.month - 1]}',
+                style: kDate,
               ),
-          ]),
-        ],
+              if (alarm != null)
+                GestureDetector(
+                  onTap: Native.openAlarms,
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text('   ⏰ ${_alarmText(alarm)}', style: kDate),
+                  ),
+                ),
+            ]),
+          ],
+        ),
       ),
-    );
+    ]);
   }
 }

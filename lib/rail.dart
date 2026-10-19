@@ -1,107 +1,90 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-import 'apps_model.dart';
+import 'style.dart';
 
-/// Vertical ★ # A–Z strip. Drag or tap to jump; shows a bubble + haptic tick.
-class AlphabetRail extends StatefulWidget {
-  final Set<String> enabled;
-  final ValueChanged<String> onLetter;
-  final Color accent;
+/// How far (dp, negative = left) a rail letter bends away from the edge when
+/// it is [d] dp above or below the finger.
+double railBend(double d) => -88 * math.exp(-(d * d) / (2 * 95 * 95));
 
-  const AlphabetRail({
-    super.key,
-    required this.enabled,
-    required this.onLetter,
-    required this.accent,
-  });
+/// Where every Alphabet Rail letter sits on screen.
+class RailGeometry {
+  final List<String> letters;
+  final double starY; // centre of ★
+  final double pitch; // distance between letter centres
+  final double centerX; // letter centre when not bent
 
-  @override
-  State<AlphabetRail> createState() => _AlphabetRailState();
-}
+  const RailGeometry(this.letters, this.starY, this.pitch, this.centerX);
 
-class _AlphabetRailState extends State<AlphabetRail> {
-  static const _width = 32.0;
-  String? _active;
-  double _y = 0;
-
-  void _at(double dy, double height) {
-    final i = (dy / height * railLetters.length)
-        .floor()
-        .clamp(0, railLetters.length - 1);
-    final l = railLetters[i];
-    setState(() => _y = dy.clamp(0, height));
-    if (l != _active) {
-      _active = l;
-      HapticFeedback.selectionClick();
-      widget.onLetter(l);
-    }
+  /// ★ at 31.1 % of the screen height, 19.2 dp per letter, squeezed if the
+  /// letters would run into the navigation bar.
+  factory RailGeometry.of(List<String> letters, Size screen,
+      {double bottomInset = 0}) {
+    final starY = screen.height * 0.311;
+    final room = screen.height - bottomInset - 24 - starY;
+    final n = math.max(1, letters.length - 1);
+    return RailGeometry(letters, starY, math.min(19.2, room / n),
+        screen.width - kRailRight);
   }
 
-  void _end() => setState(() => _active = null);
+  double yOf(int i) => starY + i * pitch;
+  double get top => starY - pitch / 2 - 12;
+  double get bottom => yOf(letters.length - 1) + pitch / 2 + 12;
+
+  int indexAt(double y) =>
+      ((y - starY) / pitch).round().clamp(0, letters.length - 1);
+}
+
+/// Draws the rail. While [fingerY] is set the letters bend around the finger
+/// and a bubble shows the [active] letter.
+class AlphabetRail extends StatelessWidget {
+  final RailGeometry geo;
+  final double? fingerY;
+  final String? active;
+
+  const AlphabetRail(
+      {super.key, required this.geo, this.fingerY, this.active});
+
+  double _dx(int i) => fingerY == null ? 0 : railBend(geo.yOf(i) - fingerY!);
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      final h = c.maxHeight;
-      return Stack(clipBehavior: Clip.none, children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onVerticalDragStart: (d) => _at(d.localPosition.dy, h),
-          onVerticalDragUpdate: (d) => _at(d.localPosition.dy, h),
-          onVerticalDragEnd: (_) => _end(),
-          onTapDown: (d) => _at(d.localPosition.dy, h),
-          onTapUp: (_) => _end(),
-          onTapCancel: _end,
-          child: SizedBox(
-            width: _width,
-            height: h,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                for (final l in railLetters)
-                  Text(
-                    l,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight:
-                          l == _active ? FontWeight.w700 : FontWeight.w400,
-                      color: l == _active
-                          ? widget.accent
-                          : Colors.white.withValues(
-                              alpha: l == '★' || widget.enabled.contains(l)
-                                  ? 0.75
-                                  : 0.25),
-                    ),
-                  ),
-              ],
+    final ai = active == null ? -1 : geo.letters.indexOf(active!);
+    return Stack(clipBehavior: Clip.none, children: [
+      for (var i = 0; i < geo.letters.length; i++)
+        Positioned(
+          left: geo.centerX + _dx(i) - 16,
+          top: geo.yOf(i) - 12,
+          width: 32,
+          height: 24,
+          child: Center(
+            child: Text(
+              geo.letters[i],
+              style: i == ai
+                  ? kRailText.copyWith(fontWeight: FontWeight.w600)
+                  : kRailText,
             ),
           ),
         ),
-        if (_active != null)
-          Positioned(
-            right: _width + 24,
-            top: _y - 36,
-            child: IgnorePointer(
-              child: Container(
-                width: 72,
-                height: 72,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: widget.accent,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  _active!,
-                  style: const TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black),
-                ),
-              ),
-            ),
+      if (ai >= 0 && fingerY != null)
+        Positioned(
+          left: geo.centerX + _dx(ai) - 16 - 52,
+          top: fingerY! - 22,
+          width: 44,
+          height: 44,
+          child: Container(
+            alignment: Alignment.center,
+            decoration:
+                const BoxDecoration(color: kBubble, shape: BoxShape.circle),
+            child: Text(geo.letters[ai],
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF202020),
+                    height: 1.0)),
           ),
-      ]);
-    });
+        ),
+    ]);
   }
 }

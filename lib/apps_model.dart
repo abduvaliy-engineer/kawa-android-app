@@ -1,42 +1,31 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'native.dart';
 
-/// Rail order: ★ (Favorites), # (non A–Z), then A–Z.
-const railLetters = [
-  '★', '#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-  'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-];
-
 class AppsModel extends ChangeNotifier {
-  static const _favKey = 'favorites';
-
-  /// Null if storage failed; Kawa still runs, Favorites just aren't saved.
-  SharedPreferences? _prefs;
   StreamSubscription<String>? _sub;
 
   List<AppEntry> apps = const [];
   List<String> _favorites = [];
   DateTime? nextAlarm;
-  final Map<String, Future<Uint8List?>> _icons = {};
+
+  /// Apps grouped by rail letter, in rail order ('#' first, then A–Z).
+  Map<String, List<AppEntry>> sections = const {};
 
   /// Bumped every time the home button is pressed while Kawa is on top.
   final ValueNotifier<int> homePressed = ValueNotifier(0);
 
   Future<void> init() async {
     try {
-      _prefs = await SharedPreferences.getInstance();
-      _favorites = _prefs!.getStringList(_favKey) ?? [];
+      _favorites = await Native.getFavorites();
     } catch (e) {
-      debugPrint('kawa: favorites storage unavailable: $e');
+      debugPrint('kawa: favorites unavailable: $e');
     }
     _sub = Native.events.listen((e) {
       switch (e) {
         case 'apps':
-          _icons.clear();
           refreshApps();
         case 'alarm':
           refreshAlarm();
@@ -55,20 +44,32 @@ class AppsModel extends ChangeNotifier {
       return a.label.toLowerCase().compareTo(b.label.toLowerCase());
     });
     apps = list;
+    final s = <String, List<AppEntry>>{};
+    for (final a in list) {
+      (s[a.letter] ??= []).add(a);
+    }
+    sections = s;
     // Favorites whose app is gone drop out quietly.
     final installed = {for (final a in apps) a.package};
     final kept = _favorites.where(installed.contains).toList();
     if (kept.length != _favorites.length) {
       _favorites = kept;
-      await _prefs?.setStringList(_favKey, _favorites);
+      await Native.setFavorites(_favorites);
     }
     notifyListeners();
   }
 
   Future<void> refreshAlarm() async {
-    nextAlarm = await Native.nextAlarm();
+    try {
+      nextAlarm = await Native.nextAlarm();
+    } catch (_) {
+      nextAlarm = null;
+    }
     notifyListeners();
   }
+
+  /// ★ followed by every letter that has at least one app.
+  List<String> get railLetters => ['★', ...sections.keys];
 
   List<AppEntry> get favorites {
     final byPkg = <String, AppEntry>{};
@@ -78,21 +79,17 @@ class AppsModel extends ChangeNotifier {
     return [for (final p in _favorites) if (byPkg[p] != null) byPkg[p]!];
   }
 
+  /// Apps shown when the finger rests on [letter]; ★ means Favorites.
+  List<AppEntry> sectionOf(String letter) =>
+      letter == '★' ? favorites : (sections[letter] ?? const []);
+
   bool isFavorite(String package) => _favorites.contains(package);
 
   Future<void> toggleFavorite(String package) async {
     if (!_favorites.remove(package)) _favorites.add(package);
-    await _prefs?.setStringList(_favKey, _favorites);
     notifyListeners();
+    await Native.setFavorites(_favorites);
   }
-
-  Future<Uint8List?> icon(AppEntry a) =>
-      _icons.putIfAbsent(a.component, () => Native.icon(a.component));
-
-  /// Index of the first app filed under [letter], or -1 if none.
-  int firstIndexOf(String letter) => apps.indexWhere((a) => a.letter == letter);
-
-  Set<String> get usedLetters => {for (final a in apps) a.letter};
 
   /// Name matches: prefix matches first, then word-start, then anywhere.
   List<AppEntry> search(String query) {

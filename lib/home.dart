@@ -1,6 +1,3 @@
-import 'dart:async';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +5,16 @@ import 'apps_model.dart';
 import 'glance.dart';
 import 'native.dart';
 import 'rail.dart';
+import 'style.dart';
+
+/// One row of the App List: a letter header or an app.
+class _Row {
+  final String? header;
+  final AppEntry? app;
+  const _Row.header(String this.header) : app = null;
+  const _Row.app(AppEntry this.app) : header = null;
+  double get extent => header != null ? kHeader : kRow;
+}
 
 /// The Home: Glance, Favorites, App List, Alphabet Rail, Search.
 class HomeScreen extends StatefulWidget {
@@ -19,16 +26,23 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Fixed row heights make Alphabet Rail jumps exact arithmetic.
-  static const _favRow = 60.0;
-  static const _appRow = 60.0;
-  static const _gap = 48.0;
-
   final _scroll = ScrollController();
   final _search = TextEditingController();
   final _focus = FocusNode();
   late final AppLifecycleListener _life;
+
+  bool _searching = false;
   String _query = '';
+
+  // Alphabet Rail touch.
+  RailGeometry? _geo;
+  String? _railLetter; // letter under the finger (or last one touched)
+  double? _bendY; // finger y while on the rail; letters bend around it
+  int? _hover; // app index in the Section View under the finger
+
+  // Layout of the scrolling App List, rebuilt every build.
+  Map<String, double> _sectionTop = const {};
+  double _listStart = 0;
 
   AppsModel get model => widget.model;
 
@@ -52,15 +66,30 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  void _clearSearch() {
+  // ── Navigation ──────────────────────────────────────────────────────────
+
+  void _closeSearch() {
     _search.clear();
     _focus.unfocus();
-    if (_query.isNotEmpty) setState(() => _query = '');
+    if (_searching || _query.isNotEmpty) {
+      setState(() {
+        _searching = false;
+        _query = '';
+      });
+    }
   }
 
-  /// Home pressed (or back): clear Search and return to the Glance.
+  void _openSearch() {
+    if (_searching) return;
+    HapticFeedback.lightImpact();
+    setState(() => _searching = true);
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _focus.requestFocus());
+  }
+
+  /// Home pressed (or back): close Search and return to the Glance.
   void _goHome() {
-    _clearSearch();
+    _closeSearch();
     Navigator.of(context).popUntil((r) => r.isFirst);
     if (_scroll.hasClients) {
       _scroll.animateTo(0,
@@ -71,27 +100,65 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _launch(AppEntry a) {
     Native.launch(a.component);
-    Future.delayed(const Duration(milliseconds: 400), _clearSearch);
+    if (_searching) {
+      Future.delayed(const Duration(milliseconds: 400), _closeSearch);
+    }
   }
 
-  void _jump(String letter, double glanceH) {
-    if (!_scroll.hasClients) return;
-    if (letter == '★') {
-      _scroll.jumpTo(0);
+  // ── Alphabet Rail touch ─────────────────────────────────────────────────
+
+  /// Top of the Section View's first app row (header sits on ★'s line).
+  double get _sectionRowsTop => _geo!.starY - 31 + kHeader;
+
+  void _railAt(Offset p) {
+    final geo = _geo;
+    if (geo == null || geo.letters.isEmpty) return;
+    final width = MediaQuery.sizeOf(context).width;
+    if (p.dx >= width - kRailHit - 8 || _railLetter == null) {
+      // On the rail: pick the nearest letter.
+      final l = geo.letters[geo.indexAt(p.dy)];
+      if (l != _railLetter) HapticFeedback.selectionClick();
+      setState(() {
+        _railLetter = l;
+        _bendY = p.dy;
+        _hover = null;
+      });
+    } else {
+      // Slid left into the Section View: hover the app under the finger.
+      final apps = model.sectionOf(_railLetter!);
+      final i = ((p.dy - _sectionRowsTop) / kRow).floor();
+      final h = (i >= 0 && i < apps.length) ? i : null;
+      if (h != _hover) {
+        if (h != null) HapticFeedback.selectionClick();
+        setState(() => _hover = h);
+      }
+    }
+  }
+
+  void _railEnd() {
+    final letter = _railLetter;
+    final hover = _hover;
+    setState(() {
+      _railLetter = null;
+      _bendY = null;
+      _hover = null;
+    });
+    if (letter == null) return;
+    final apps = model.sectionOf(letter);
+    if (hover != null && hover < apps.length) {
+      _launch(apps[hover]);
       return;
     }
-    // Empty letters jump to the next letter that has apps.
-    var i = -1;
-    for (var k = railLetters.indexOf(letter);
-        k < railLetters.length && i < 0;
-        k++) {
-      i = model.firstIndexOf(railLetters[k]);
-    }
-    if (i < 0) return;
-    final target =
-        glanceH + model.favorites.length * _favRow + _gap + i * _appRow;
+    // Released on the rail: jump the App List so that section sits where
+    // the Section View showed it.
+    if (!_scroll.hasClients) return;
+    final double target = letter == '★'
+        ? 0.0
+        : _listStart + (_sectionTop[letter] ?? 0) - (_geo!.starY - 31);
     _scroll.jumpTo(target.clamp(0.0, _scroll.position.maxScrollExtent));
   }
+
+  // ── App Menu ────────────────────────────────────────────────────────────
 
   void _menu(AppEntry a) {
     HapticFeedback.mediumImpact();
@@ -137,72 +204,84 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ── Build ───────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: model,
       builder: (context, _) {
-        final scheme = Theme.of(context).colorScheme;
-        final glanceH = MediaQuery.sizeOf(context).height * 0.42;
+        final mq = MediaQuery.of(context);
+        final geo = RailGeometry.of(model.railLetters, mq.size,
+            bottomInset: mq.padding.bottom);
+        _geo = geo;
+        final glanceH = mq.size.height * 0.367;
+        final favs = model.favorites;
+
+        final rows = <_Row>[];
+        final tops = <String, double>{};
+        var y = 0.0;
+        model.sections.forEach((letter, apps) {
+          tops[letter] = y;
+          rows.add(_Row.header(letter));
+          y += kHeader;
+          for (final a in apps) {
+            rows.add(_Row.app(a));
+            y += kRow;
+          }
+        });
+        _sectionTop = tops;
+        _listStart = glanceH + favs.length * kRow + kGap;
+        final touching = _railLetter != null;
+
         return PopScope(
           canPop: false,
           onPopInvokedWithResult: (_, _) => _goHome(),
           child: Scaffold(
             backgroundColor: Colors.transparent,
             resizeToAvoidBottomInset: true,
-            body: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.20),
-                    Colors.black.withValues(alpha: 0.55),
-                  ],
-                ),
-              ),
-              child: SafeArea(
-                bottom: false,
-                child: Column(children: [
-                  Expanded(
-                    child: Stack(children: [
-                      Positioned.fill(
-                        child: _query.isEmpty
-                            ? _homeList(glanceH, scheme)
-                            : _results(scheme),
+            body: _searching
+                ? _searchView()
+                : Stack(children: [
+                    Positioned.fill(
+                      child: Opacity(
+                        opacity: touching ? 0 : 1,
+                        child: _homeList(glanceH, favs, rows, mq.size.height),
                       ),
-                      if (_query.isEmpty)
-                        Positioned(
-                          right: 6,
-                          top: 24,
-                          bottom: 12,
-                          child: AlphabetRail(
-                            enabled: model.usedLetters,
-                            accent: scheme.primary,
-                            onLetter: (l) => _jump(l, glanceH),
-                          ),
-                        ),
-                    ]),
-                  ),
-                  _searchBar(scheme),
-                ]),
-              ),
-            ),
+                    ),
+                    if (touching) Positioned.fill(child: _sectionView()),
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AlphabetRail(
+                            geo: geo, fingerY: _bendY, active: _railLetter),
+                      ),
+                    ),
+                    Positioned(
+                      right: 0,
+                      top: geo.top,
+                      width: kRailHit,
+                      height: geo.bottom - geo.top,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanDown: (d) => _railAt(d.globalPosition),
+                        onPanUpdate: (d) => _railAt(d.globalPosition),
+                        onPanEnd: (_) => _railEnd(),
+                        onPanCancel: _railEnd,
+                      ),
+                    ),
+                  ]),
           ),
         );
       },
     );
   }
 
-  Widget _homeList(double glanceH, ColorScheme scheme) {
-    final favs = model.favorites;
-    final apps = model.apps;
+  Widget _homeList(
+      double glanceH, List<AppEntry> favs, List<_Row> rows, double screenH) {
     return NotificationListener<OverscrollNotification>(
-      // Swipe down at the top focuses Search.
+      // Pulling down at the top opens Search.
       onNotification: (n) {
-        if (n.overscroll < 0 && n.dragDetails != null && !_focus.hasFocus) {
-          _focus.requestFocus();
-        }
+        if (n.overscroll < -2 && n.dragDetails != null) _openSearch();
         return false;
       },
       child: CustomScrollView(
@@ -214,205 +293,185 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SizedBox(height: glanceH, child: Glance(model: model)),
           ),
           SliverFixedExtentList(
-            itemExtent: _favRow,
+            itemExtent: kRow,
             delegate: SliverChildBuilderDelegate(
-              (c, i) => _favTile(favs[i]),
+              (c, i) => _appRow(favs[i]),
               childCount: favs.length,
             ),
           ),
           SliverToBoxAdapter(
             child: SizedBox(
-              height: _gap,
+              height: kGap,
               child: favs.isEmpty
                   ? Padding(
-                      padding: const EdgeInsets.only(left: 32, top: 4),
-                      child: Text('Long-press any app to pin it here',
-                          style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.5))),
+                      padding: const EdgeInsets.only(left: kLabelX),
+                      child: Text('Long-press an app to pin it',
+                          style: kLabel.copyWith(
+                              fontSize: 13, color: const Color(0x99FFFFFF))),
                     )
                   : null,
             ),
           ),
-          SliverFixedExtentList(
-            itemExtent: _appRow,
+          SliverVariedExtentList(
+            itemExtentBuilder: (i, _) => rows[i].extent,
             delegate: SliverChildBuilderDelegate(
-              (c, i) => _appTile(apps[i], scheme,
-                  letter: i == 0 || apps[i - 1].letter != apps[i].letter
-                      ? apps[i].letter
-                      : null),
-              childCount: apps.length,
+              (c, i) => rows[i].header != null
+                  ? _headerRow(rows[i].header!)
+                  : _appRow(rows[i].app!),
+              childCount: rows.length,
             ),
           ),
-          // Lets the last letters scroll up to the top too.
-          SliverToBoxAdapter(
-            child: SizedBox(height: max(0, glanceH)),
-          ),
+          // Lets the last sections scroll up to the rail's ★ line too.
+          SliverToBoxAdapter(child: SizedBox(height: screenH * 0.6)),
         ],
       ),
     );
   }
 
-  Widget _results(ColorScheme scheme) {
-    final res = model.search(_query);
-    if (res.isEmpty) {
-      return Align(
-        alignment: Alignment.bottomLeft,
+  /// While the finger is on the rail: only the touched letter's apps,
+  /// header on ★'s line, ready to slide-to-launch.
+  Widget _sectionView() {
+    final letter = _railLetter!;
+    final apps = model.sectionOf(letter);
+    return Stack(children: [
+      Positioned(
+        left: 0,
+        right: 0,
+        top: _geo!.starY - 31,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _headerRow(letter),
+            for (var i = 0; i < apps.length; i++)
+              _appRow(apps[i], hover: i == _hover, interactive: false),
+            if (apps.isEmpty)
+              SizedBox(
+                height: kRow,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: kLabelX, top: 18),
+                  child: Text('Long-press an app to pin it',
+                      style: kLabel.copyWith(color: const Color(0x99FFFFFF))),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ]);
+  }
+
+  Widget _headerRow(String letter) => SizedBox(
+        height: kHeader,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
-          child: Text('No apps match "$_query"',
-              style: TextStyle(
-                  fontSize: 16, color: Colors.white.withValues(alpha: 0.6))),
+          padding: const EdgeInsets.only(left: kHeaderX, top: 21),
+          child: Text(letter, style: kHeaderText),
         ),
       );
-    }
-    // Reversed: the top match sits right above the Search bar (thumb).
-    return ListView.builder(
-      reverse: true,
-      itemExtent: _appRow,
-      padding: const EdgeInsets.only(bottom: 8),
-      itemCount: res.length,
-      itemBuilder: (c, i) => _appTile(res[i], scheme, highlight: i == 0),
-    );
-  }
 
-  Widget _favTile(AppEntry a) {
-    return InkWell(
-      onTap: () => _launch(a),
-      onLongPress: () => _menu(a),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 32, right: 56),
-        child: Row(children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.55),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 22),
-          Expanded(
-            child: Text(
-              a.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w300,
-                color: Colors.white.withValues(alpha: 0.92),
-              ),
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  Widget _appTile(AppEntry a, ColorScheme scheme,
-      {String? letter, bool highlight = false}) {
-    return InkWell(
-      onTap: () => _launch(a),
-      onLongPress: () => _menu(a),
-      child: Container(
-        color: highlight ? Colors.white.withValues(alpha: 0.08) : null,
-        padding: const EdgeInsets.only(left: 20, right: 56),
-        child: Row(children: [
-          SizedBox(
-            width: 30,
-            child: letter == null
-                ? null
-                : Text(letter,
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: scheme.primary)),
-          ),
-          _AppIcon(future: model.icon(a), size: 36),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              a.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 18, color: Colors.white.withValues(alpha: 0.9)),
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  Widget _searchBar(ColorScheme scheme) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-        child: Container(
-          height: 52,
+  Widget _appRow(AppEntry a, {bool hover = false, bool interactive = true}) {
+    final row = SizedBox(
+      height: kRow,
+      child: Row(children: [
+        const SizedBox(width: kDotX - 5),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          width: 10,
+          height: 10,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(26),
+            color: hover ? Colors.white : kDotColor,
+            shape: BoxShape.circle,
           ),
-          child: Row(children: [
-            const SizedBox(width: 18),
-            Icon(Icons.search, color: Colors.white.withValues(alpha: 0.7)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _search,
-                focusNode: _focus,
-                autocorrect: false,
-                enableSuggestions: false,
-                textInputAction: TextInputAction.go,
-                cursorColor: scheme.primary,
-                style: const TextStyle(fontSize: 18, color: Colors.white),
-                decoration: InputDecoration.collapsed(
-                  hintText: 'Search apps',
-                  hintStyle:
-                      TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-                ),
-                onChanged: (v) => setState(() => _query = v),
-                onSubmitted: (_) {
-                  final r = model.search(_query);
-                  if (r.isNotEmpty) _launch(r.first);
-                },
-              ),
-            ),
-            if (_query.isNotEmpty)
-              IconButton(
-                icon: Icon(Icons.close,
-                    color: Colors.white.withValues(alpha: 0.7)),
-                onPressed: _clearSearch,
-              )
-            else
-              const SizedBox(width: 18),
-          ]),
         ),
-      ),
+        const SizedBox(width: kLabelX - kDotX - 5),
+        Expanded(
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 120),
+            style: hover
+                ? kLabel.copyWith(fontSize: 18, fontWeight: FontWeight.w500)
+                : kLabel,
+            child: Text(a.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+        const SizedBox(width: kRailHit),
+      ]),
+    );
+    if (!interactive) return row;
+    return InkWell(
+      onTap: () => _launch(a),
+      onLongPress: () => _menu(a),
+      child: row,
     );
   }
-}
 
-class _AppIcon extends StatelessWidget {
-  final Future<Uint8List?> future;
-  final double size;
-  const _AppIcon({required this.future, required this.size});
+  // ── Search ──────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: FutureBuilder<Uint8List?>(
-        future: future,
-        builder: (c, s) => s.data == null
-            ? const SizedBox.shrink()
-            : Image.memory(s.data!,
-                width: size,
-                height: size,
-                gaplessPlayback: true,
-                filterQuality: FilterQuality.medium),
+  Widget _searchView() {
+    final res = model.search(_query);
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: Color(0x99000000)),
+      child: SafeArea(
+        child: Column(children: [
+          Expanded(
+            child: _query.isEmpty
+                ? const SizedBox.shrink()
+                : res.isEmpty
+                    ? Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                              kLabelX, 0, 32, 16),
+                          child: Text('No apps match "$_query"',
+                              style: kLabel.copyWith(
+                                  color: const Color(0x99FFFFFF))),
+                        ),
+                      )
+                    // Reversed: the top match sits right above the field.
+                    : ListView.builder(
+                        reverse: true,
+                        itemExtent: kRow,
+                        itemCount: res.length,
+                        itemBuilder: (c, i) => _appRow(res[i], hover: i == 0),
+                      ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0x26FFFFFF),
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: Row(children: [
+                const SizedBox(width: 18),
+                const Icon(Icons.search, color: Color(0xB3FFFFFF)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _search,
+                    focusNode: _focus,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    textInputAction: TextInputAction.go,
+                    cursorColor: Colors.white,
+                    style: kLabel.copyWith(fontSize: 17),
+                    decoration: const InputDecoration.collapsed(
+                      hintText: 'Search apps',
+                      hintStyle: TextStyle(color: Color(0x80FFFFFF)),
+                    ),
+                    onChanged: (v) => setState(() => _query = v),
+                    onSubmitted: (_) {
+                      final r = model.search(_query);
+                      if (r.isNotEmpty) _launch(r.first);
+                    },
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Color(0xB3FFFFFF)),
+                  onPressed: _closeSearch,
+                ),
+              ]),
+            ),
+          ),
+        ]),
       ),
     );
   }

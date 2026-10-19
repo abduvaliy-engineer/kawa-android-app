@@ -1,5 +1,3 @@
-// dynamic_color speaks material_ui's ColorScheme; only its seed Color crosses over.
-import 'package:dynamic_color/dynamic_color.dart' show DynamicColorBuilder;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -31,22 +29,24 @@ class KawaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DynamicColorBuilder(
-      builder: (_, dark) {
-        final scheme = ColorScheme.fromSeed(
-          seedColor: dark?.primary ?? const Color(0xFF7FB8D8),
-          brightness: Brightness.dark,
-        );
-        return MaterialApp(
-          title: 'Kawa',
-          debugShowCheckedModeBanner: false,
-          themeMode: ThemeMode.dark,
-          darkTheme: ThemeData(colorScheme: scheme, useMaterial3: true),
-          theme: ThemeData(colorScheme: scheme, useMaterial3: true),
-          color: Colors.transparent,
-          home: HomeScreen(model: model),
-        );
-      },
+    final theme = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      fontFamily: 'Montserrat',
+      colorScheme: const ColorScheme.dark(
+        primary: Colors.white,
+        surface: Color(0xFF1C1C1E),
+      ),
+      splashFactory: NoSplash.splashFactory,
+    );
+    return MaterialApp(
+      title: 'Kawa',
+      debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.dark,
+      theme: theme,
+      darkTheme: theme,
+      color: Colors.transparent,
+      home: HomeScreen(model: model),
     );
   }
 }

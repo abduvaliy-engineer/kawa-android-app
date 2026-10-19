@@ -16,7 +16,8 @@ class AppEntry {
   }
 }
 
-/// Thin wrapper over the Kotlin side (MainActivity.kt).
+/// Thin wrapper over the Kotlin side (MainActivity.kt). Kawa uses no pub
+/// plugins: everything Android-only goes through these two channels.
 class Native {
   static const _m = MethodChannel('kawa/apps');
   static const _e = EventChannel('kawa/events');
@@ -35,8 +36,11 @@ class Native {
     ];
   }
 
-  static Future<Uint8List?> icon(String component, {int size = 96}) =>
-      _m.invokeMethod<Uint8List>('icon', {'component': component, 'size': size});
+  static Future<List<String>> getFavorites() async =>
+      await _m.invokeListMethod<String>('getFavorites') ?? <String>[];
+
+  static Future<void> setFavorites(List<String> packages) =>
+      _m.invokeMethod('setFavorites', {'favorites': packages});
 
   static Future<void> launch(String component) =>
       _m.invokeMethod('launch', {'component': component});
