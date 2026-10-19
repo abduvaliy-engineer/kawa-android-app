@@ -34,4 +34,29 @@ void main() {
     expect(g.indexAt(g.yOf(1) + 5), 1);
     expect(g.indexAt(10000), 2);
   });
+
+  group('sectionLayout', () {
+    const h = 823.5, star = 256.1, top = 30.0, bottom = 20.0;
+    ({double top, double row}) l(int n) => sectionLayout(
+        count: n, starY: star, screenH: h, topInset: top, bottomInset: bottom);
+
+    test('a short section sits on the star line', () {
+      expect(l(3).top, closeTo(star - 31, 1e-9));
+      expect(l(3).row, 56);
+    });
+
+    test('a long section moves up so its last app stays reachable', () {
+      final r = l(11); // the M section on the S23
+      expect(r.top, lessThan(star - 31));
+      expect(r.row, 56);
+      expect(r.top + 48 + 11 * r.row, closeTo(h - bottom - 40, 1e-9));
+    });
+
+    test('a huge section squeezes rows but never above the status bar', () {
+      final r = l(30);
+      expect(r.top, top + 8);
+      expect(r.row, lessThan(56));
+      expect(r.row, greaterThanOrEqualTo(40));
+    });
+  });
 }

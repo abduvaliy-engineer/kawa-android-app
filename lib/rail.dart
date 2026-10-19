@@ -88,3 +88,27 @@ class AlphabetRail extends StatelessWidget {
     ]);
   }
 }
+
+/// Where the Section View sits: [top] of its letter header, and the [row]
+/// height of each app. It prefers the header on ★'s line; a section too long
+/// for that moves up so its last app stays above the navigation bar, and one
+/// too long for the whole screen squeezes its rows (down to 40 dp).
+({double top, double row}) sectionLayout({
+  required int count,
+  required double starY,
+  required double screenH,
+  double topInset = 0,
+  double bottomInset = 0,
+}) {
+  final preferred = starY - 31;
+  final minTop = topInset + 8;
+  // Stay clear of the bottom swipe-gesture zone, or the touch gets cancelled.
+  final maxBottom = screenH - bottomInset - 40;
+  final n = math.max(count, 1);
+  final needed = kHeader + n * kRow;
+  if (preferred + needed <= maxBottom) return (top: preferred, row: kRow);
+  final top = maxBottom - needed;
+  if (top >= minTop) return (top: top, row: kRow);
+  final row = math.max(40.0, (maxBottom - minTop - kHeader) / n);
+  return (top: minTop, row: row);
+}

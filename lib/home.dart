@@ -118,8 +118,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Alphabet Rail touch ─────────────────────────────────────────────────
 
-  /// Top of the Section View's first app row (header sits on ★'s line).
-  double get _sectionRowsTop => _geo!.starY - 31 + kHeader;
+  /// Section View placement for [letter] (see [sectionLayout]).
+  ({double top, double row}) _layoutOf(String letter) {
+    final mq = MediaQuery.of(context);
+    return sectionLayout(
+      count: model.sectionOf(letter).length,
+      starY: _geo!.starY,
+      screenH: mq.size.height,
+      topInset: mq.padding.top,
+      bottomInset: [mq.padding.bottom, mq.systemGestureInsets.bottom]
+          .reduce((a, b) => a > b ? a : b),
+    );
+  }
 
   void _railAt(Offset p) {
     final geo = _geo;
@@ -137,7 +147,8 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       // Slid left into the Section View: hover the app under the finger.
       final apps = model.sectionOf(_railLetter!);
-      final i = ((p.dy - _sectionRowsTop) / kRow).floor();
+      final l = _layoutOf(_railLetter!);
+      final i = ((p.dy - l.top - kHeader) / l.row).floor();
       final h = (i >= 0 && i < apps.length) ? i : null;
       if (h != _hover) {
         if (h != null) HapticFeedback.selectionClick();
@@ -165,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_scroll.hasClients) return;
     final double target = letter == '★'
         ? 0.0
-        : _listStart + (_sectionTop[letter] ?? 0) - (_geo!.starY - 31);
+        : _listStart + (_sectionTop[letter] ?? 0) - _layoutOf(letter).top;
     _scroll.jumpTo(target.clamp(0.0, _scroll.position.maxScrollExtent));
   }
 
@@ -367,17 +378,19 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _sectionView() {
     final letter = _railLetter!;
     final apps = model.sectionOf(letter);
+    final layout = _layoutOf(letter);
     return Stack(children: [
       Positioned(
         left: 0,
         right: 0,
-        top: _geo!.starY - 31,
+        top: layout.top,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _headerRow(letter),
             for (var i = 0; i < apps.length; i++)
-              _appRow(apps[i], hover: i == _hover, interactive: false),
+              _appRow(apps[i],
+                  hover: i == _hover, interactive: false, height: layout.row),
             if (apps.isEmpty)
               SizedBox(
                 height: kRow,
@@ -401,9 +414,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-  Widget _appRow(AppEntry a, {bool hover = false, bool interactive = true}) {
+  Widget _appRow(AppEntry a,
+      {bool hover = false, bool interactive = true, double height = kRow}) {
     final row = SizedBox(
-      height: kRow,
+      height: height,
       child: Row(children: [
         const SizedBox(width: kDotX - 5),
         AnimatedContainer(
