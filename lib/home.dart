@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'apps_model.dart';
 import 'glance.dart';
+import 'kanji.dart';
 import 'native.dart';
 import 'rail.dart';
 import 'favorites_picker.dart';
@@ -52,11 +53,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     model.homePressed.addListener(_goHome);
+    model.kanjiRequested.addListener(_showKanji);
     // First run: ask which apps to pin.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !model.favoritesChosen) openFavoritesPicker(context, model);
     });
+    if (model.kanjiRequested.value > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showKanji());
+    }
     _life = AppLifecycleListener(onResume: () {
+      model.refreshKanji();
       model.refreshAlarm();
       model.refreshApps();
     });
@@ -65,11 +71,20 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     model.homePressed.removeListener(_goHome);
+    model.kanjiRequested.removeListener(_showKanji);
     _life.dispose();
     _scroll.dispose();
     _search.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  void _showKanji() {
+    final k = model.kanji;
+    if (!mounted || k == null) return;
+    _closeSearch();
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    showKanjiCard(context, k);
   }
 
   // ── Navigation ──────────────────────────────────────────────────────────
@@ -253,7 +268,9 @@ class _HomeScreenState extends State<HomeScreen> {
         final geo = RailGeometry.of(model.railLetters, mq.size,
             bottomInset: mq.padding.bottom);
         _geo = geo;
-        final glanceH = mq.size.height * 0.367;
+        // The Kanji block adds a row under the date.
+        final glanceH =
+            mq.size.height * 0.367 + (model.kanji != null ? 76 : 0);
         final favs = model.favorites;
 
         final rows = <_Row>[];

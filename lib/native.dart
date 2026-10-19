@@ -24,7 +24,8 @@ class Native {
 
   /// 'apps' (installed/removed/changed), 'alarm' (next alarm changed),
   /// 'home' (home button pressed while Kawa is the top activity),
-  /// 'role' (the default Home app may have changed).
+  /// 'role' (the default Home app may have changed),
+  /// 'kanji' (the Kanji of the Hour widget was tapped while Kawa was running).
   static final Stream<String> events =
       _e.receiveBroadcastStream().map((e) => e as String).asBroadcastStream();
 
@@ -74,6 +75,13 @@ class Native {
 
   static Future<String> version() async =>
       await _m.invokeMethod<String>('version') ?? '?';
+
+  /// Kanji of the Hour as JSON (one entry of assets/kanji.json).
+  static Future<String?> kanjiNow() => _m.invokeMethod<String>('kanjiNow');
+
+  /// True once if Kawa was cold-started by tapping the widget.
+  static Future<bool> takeLaunchedForKanji() async =>
+      await _m.invokeMethod<bool>('takeLaunchedForKanji') ?? false;
 
   static Future<void> openClock() => _m.invokeMethod('openClock');
   static Future<void> openAlarms() => _m.invokeMethod('openAlarms');

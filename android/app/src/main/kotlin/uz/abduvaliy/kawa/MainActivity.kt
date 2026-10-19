@@ -28,7 +28,7 @@ import java.util.concurrent.Executors
 
 /**
  * Kawa's only native code: the Android-only parts Flutter can't reach.
- * Channel "kawa/apps" answers calls; "kawa/events" pushes "apps" / "alarm" / "home" / "role".
+ * Channel "kawa/apps" answers calls; "kawa/events" pushes "apps" / "alarm" / "home" / "role" / "kanji".
  */
 class MainActivity : FlutterActivity() {
     private val io = Executors.newSingleThreadExecutor()
@@ -57,6 +57,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        launchedForKanji = intent?.action == KanjiWidget.ACTION_OPEN
         launcherApps.registerCallback(packages, main)
         val filter = IntentFilter(AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED)
         if (Build.VERSION.SDK_INT >= 33) {
@@ -109,12 +110,20 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         emit("role") // the user may come back from the system Home picker
+        // Cheap catch-up in case an inexact :00 alarm was held back by doze.
+        io.execute { KanjiWidget.refreshAll(applicationContext) }
     }
+
+    /** Set when Kawa was opened by tapping the widget; read once by Dart. */
+    private var launchedForKanji = false
 
     // singleTask HOME activity: pressing home while we're on top lands here.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.action == Intent.ACTION_MAIN) emit("home")
+        when (intent.action) {
+            Intent.ACTION_MAIN -> emit("home")
+            KanjiWidget.ACTION_OPEN -> emit("kanji")
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -177,6 +186,17 @@ class MainActivity : FlutterActivity() {
                     "nextAlarm" -> result.success(
                         getSystemService(AlarmManager::class.java).nextAlarmClock?.triggerTime
                     )
+
+                    // Kanji of the Hour as a JSON string (see tool/build_kanji.py).
+                    "kanjiNow" -> io.execute {
+                        val json = Kanji.now(applicationContext).toString()
+                        main.post { result.success(json) }
+                    }
+
+                    "takeLaunchedForKanji" -> {
+                        result.success(launchedForKanji)
+                        launchedForKanji = false
+                    }
 
                     "isDefaultHome" -> result.success(isDefaultHome())
                     "requestDefaultHome" -> { requestDefaultHome(); result.success(null) }

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- keyguard: allowed on lock screens that host widgets (e.g. Good Lock LockStar).
+     updatePeriodMillis is a 1-hour safety net; the real refresh is the :00 alarm. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/kanji_widget_description"
+    android:initialKeyguardLayout="@layout/kanji_widget"
+    android:initialLayout="@layout/kanji_widget"
+    android:minWidth="220dp"
+    android:minHeight="64dp"
+    android:previewLayout="@layout/kanji_widget"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="3600000"
+    android:widgetCategory="home_screen|keyguard" />

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'kanji.dart';
 import 'native.dart';
 
 class AppsModel extends ChangeNotifier {
@@ -11,6 +12,10 @@ class AppsModel extends ChangeNotifier {
   List<String> _favorites = [];
   DateTime? nextAlarm;
   bool isDefaultHome = true;
+  KanjiEntry? kanji;
+
+  /// Bumped when the user asks to see the Kanji Card (widget tap).
+  final ValueNotifier<int> kanjiRequested = ValueNotifier(0);
 
   /// False until the user has been through the Favorites picker once.
   bool favoritesChosen = true;
@@ -39,9 +44,15 @@ class AppsModel extends ChangeNotifier {
           homePressed.value++;
         case 'role':
           refreshRole();
+        case 'kanji':
+          kanjiRequested.value++;
       }
     });
-    await Future.wait([refreshApps(), refreshAlarm(), refreshRole()]);
+    await Future.wait(
+        [refreshApps(), refreshAlarm(), refreshRole(), refreshKanji()]);
+    try {
+      if (await Native.takeLaunchedForKanji()) kanjiRequested.value++;
+    } catch (_) {}
   }
 
   Future<void> refreshApps() async {
@@ -67,6 +78,18 @@ class AppsModel extends ChangeNotifier {
       await Native.setFavorites(_favorites);
     }
     notifyListeners();
+  }
+
+  Future<void> refreshKanji() async {
+    try {
+      final k = await KanjiEntry.now();
+      if (k?.kanji != kanji?.kanji) {
+        kanji = k;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('kawa: kanji unavailable: $e');
+    }
   }
 
   Future<void> refreshRole() async {
@@ -143,6 +166,7 @@ class AppsModel extends ChangeNotifier {
   void dispose() {
     _sub?.cancel();
     homePressed.dispose();
+    kanjiRequested.dispose();
     super.dispose();
   }
 }

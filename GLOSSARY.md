@@ -30,5 +30,8 @@ The menu that opens on long-press of any app: pin/unpin from Favorites, app info
 **Settings**
 Kawa's own screen, opened by long-pressing the Glance or tapping "Kawa Settings" in the App List.
 
-**Kanji of the Hour** *(v0.3)*
-One JLPT N5/N4 kanji, changed every hour, shown with its reading, meaning and one example word.
+**Kanji of the Hour**
+One JLPT N5 kanji, changed at every :00, shown under the clock and in the widget: its beginner reading (romaji・hiragana), meaning, and one example word. All 79 are shown once, in shuffled order, before any repeats.
+
+**Kanji Card**
+What opens when the Kanji of the Hour is tapped: all kun and on readings and up to three example words.

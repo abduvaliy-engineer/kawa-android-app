@@ -1,14 +1,12 @@
 # Next session
 
-v0.2 is done and has been checked on the S23 Ultra: Niagara-style look, bending rail, Section View, slide-to-launch, Settings with the default-Home switch. Kawa is the default Home on the phone.
+Done and checked on the S23 Ultra: v0.2 look, Settings and default Home, the Favorites picker, and v0.3 Kanji of the Hour on the Home (Glance block + Kanji Card).
 
-## Next up: v0.3 Kanji of the Hour (design settled in Q24–Q30)
-- Bundle JLPT N5+N4 kanji (~250) offline. Candidate data: davidluzgouveia/kanji-data (MIT; readings and meanings from KANJIDIC, CC BY-SA, credit EDRDG) plus one example word per kanji from JMdict (CC BY-SA). Generate the asset with a script in `tool/`.
-- Every hour on the hour; shuffled, no repeats until all have been shown.
-- Show: romaji・hiragana (on'yomi converted to hiragana), English meaning, one example word・meaning.
-- Where: one Glance line in Kawa, plus a native Android home-screen widget (RemoteViews in Kotlin) that the user adds to the lock screen with Good Lock → LockStar. Good Lock is region-locked, so this is not guaranteed in Uzbekistan.
-- Tap → a card in Kawa with all readings and 2–3 examples.
+## Not verified yet
+- **The widget hasn't been seen running.** It's registered (`dumpsys appwidget` lists `KanjiWidget`, category home_screen|keyguard), but Kawa has no widget host and Good Lock isn't installed yet. Next step: Good Lock → LockStar → add "Kanji of the Hour", then confirm it changes at :00 and that tapping it opens the Kanji Card.
+- The hourly change is an inexact alarm, so in doze it can arrive a few minutes late. Opening Kawa also refreshes the widget.
 
-## Polish backlog
+## Backlog
 - App icon is still the Flutter default.
 - Drag-to-reorder Favorites.
+- Kanji: an N4 mode later (`LEVELS` in tool/build_kanji.py), maybe pull from the user's AnkiDroid deck.

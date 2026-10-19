@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'apps_model.dart';
+import 'kanji.dart';
 import 'native.dart';
 import 'style.dart';
 
@@ -33,6 +34,7 @@ class _GlanceState extends State<Glance> {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       final n = DateTime.now();
       if (n.minute != _now.minute || n.day != _now.day) {
+        if (n.hour != _now.hour) widget.model.refreshKanji();
         setState(() => _now = n);
       }
     });
@@ -84,6 +86,12 @@ class _GlanceState extends State<Glance> {
                   ),
                 ),
             ]),
+            if (widget.model.kanji case final k?)
+              Padding(
+                padding: const EdgeInsets.only(top: 18),
+                child: KanjiBlock(
+                    entry: k, onTap: () => showKanjiCard(context, k)),
+              ),
             if (!widget.model.isDefaultHome)
               GestureDetector(
                 onTap: Native.requestDefaultHome,
